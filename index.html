@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Video de ubicación · Invicta</title>
 <style>
-  :root { --bg: #f6f6f4; --card: #fff; --ink: #141414; --mute: #6b6b6b; --line: #e3e3df; --accent: #E4002B; --ok: #1d7a45; }
+  :root { --bg: #f6f6f4; --card: #fff; --ink: #141414; --mute: #6b6b6b; --line: #e3e3df; --accent: #E4152C; --ok: #1d7a45; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   main { max-width: 560px; margin: 0 auto; padding: 32px 16px 64px; }
@@ -31,12 +31,27 @@
   .barra i { display: block; height: 100%; width: 5%; background: var(--ink); transition: width 1s linear; }
   .res a { display: block; margin-top: 8px; color: var(--ok); font-weight: 600; }
   .err { color: var(--accent); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; background: #ecebe7; padding: 4px; border-radius: 12px; margin-bottom: 16px; }
+  .tabs button { flex: 1; border: 0; background: transparent; padding: 10px; border-radius: 9px; font: 600 15px/1 inherit; font-family: inherit; color: var(--mute); cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .modo { display: none; }
+  .modo.on { display: block; }
+  .previa { margin-top: 10px; font-size: 14px; }
+  .previa div { padding: 8px 12px; border-radius: 8px; background: #f1f1ee; margin-top: 6px; }
+  .previa b { font-weight: 600; }
+  .previa .lim { color: var(--mute); font-size: 13px; }
+  code { background: #f1f1ee; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
   <h1>Video de ubicación</h1>
-  <p class="sub">Pegás el link de Google Maps y se generan 2 videos verticales de 7 s: la zona a 50 km y el entorno en 3D.</p>
+  <p class="sub">Videos verticales de 7 s sobre el mapa 3D, guardados en la carpeta del cliente.</p>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tabProp" aria-selected="true">Propiedad</button>
+    <button role="tab" id="tabZonas" aria-selected="false">Zonas</button>
+  </div>
 
   <div class="card">
     <label for="buscar">Cliente</label>
@@ -45,6 +60,7 @@
     <div class="elegido" id="elegido"><strong id="elegidoNombre"></strong><a id="cambiar">Cambiar</a></div>
     <div class="hint" id="cargando">Cargando clientes…</div>
 
+    <div class="modo on" id="modoProp">
     <label for="link">Link de Google Maps</label>
     <input id="link" placeholder="https://maps.app.goo.gl/… o el link largo" autocomplete="off">
 
@@ -54,6 +70,18 @@
     <label for="puntos">Puntos a destacar <span style="font-weight:400;color:var(--mute)">(opcional)</span></label>
     <textarea id="puntos" rows="3" placeholder="Uno por renglón. Ej.: Aeropuerto de Rosario&#10;Shopping Alto Rosario&#10;Club: https://maps.app.goo.gl/…"></textarea>
     <div class="hint">Podés poner solo el nombre del lugar, o «Nombre: link de Maps». Se muestran en los dos videos según la distancia.</div>
+    <div class="hint">Genera 2 videos: la zona a 50 km y el entorno en 3D.</div>
+    </div>
+
+    <div class="modo" id="modoZonas">
+    <label for="ciudad">Ciudad</label>
+    <input id="ciudad" value="Ciudad Autónoma de Buenos Aires">
+
+    <label for="videos">Videos <span style="font-weight:400;color:var(--mute)">(uno por renglón)</span></label>
+    <textarea id="videos" rows="6" placeholder="Gancho 1: Recoleta, Palermo, Belgrano&#10;Gancho 2: CABA&#10;Gancho 4: Recoleta, Barrio Norte (Av. Córdoba / Av. 9 de Julio / Av. del Libertador / Av. Coronel Díaz), Retiro&#10;Cuerpo: Calle Florida, Recoleta, Palermo, Belgrano, Av. Cabildo"></textarea>
+    <div class="hint">La cámara recorre las zonas en el orden escrito. Las calles empiezan con <code>Calle</code> o <code>Av.</code>. Para un barrio sin límites oficiales, poné entre paréntesis sus calles límite en orden, separadas por <code>/</code>.</div>
+    <div class="previa" id="previa"></div>
+    </div>
 
     <button class="go" id="go" disabled>Generar y subir a Drive</button>
 
@@ -116,13 +144,70 @@
   $('buscar').oninput = pintar;
   $('buscar').onkeydown = function (e) { if (e.key === 'Enter') { var b = $('lista').querySelector('button'); if (b) b.click(); } };
   $('link').oninput = validar;
-  function validar() { $('go').disabled = !(cliente && $('link').value.trim()); }
 
+  // ---------- pestañas ----------
+  var modo = 'prop';
+  function setModo(m) {
+    modo = m;
+    $('tabProp').setAttribute('aria-selected', m === 'prop');
+    $('tabZonas').setAttribute('aria-selected', m === 'zonas');
+    $('modoProp').classList.toggle('on', m === 'prop');
+    $('modoZonas').classList.toggle('on', m === 'zonas');
+    validar();
+  }
+  $('tabProp').onclick = function () { setModo('prop'); };
+  $('tabZonas').onclick = function () { setModo('zonas'); };
+
+  // ---------- pedido de zonas: «Nombre: zona, zona (calle / calle / calle / calle), zona» ----------
+  function partir(txt) { // separa por comas que no estén dentro de paréntesis
+    var out = [], cur = '', depth = 0;
+    for (var i = 0; i < txt.length; i++) {
+      var ch = txt[i];
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function leerVideos() {
+    return $('videos').value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).map(function (l, i) {
+      var m = l.match(/^([^:()]{1,60}):\s*(.+)$/);
+      var nombre = m ? m[1].trim() : 'Video ' + (i + 1), resto = m ? m[2] : l;
+      return { nombre: nombre, zonas: partir(resto).map(function (z) {
+        var p = z.match(/^(.+?)\s*\((.+)\)$/);
+        if (!p) return z;
+        var lim = p[2].split('/').map(function (x) { return x.trim(); }).filter(Boolean);
+        return lim.length >= 3 ? { nombre: p[1].trim(), limites: lim } : p[1].trim();
+      }) };
+    });
+  }
+  function esc(t) { return String(t).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  function previa() {
+    var v = leerVideos();
+    $('previa').innerHTML = v.map(function (x, i) {
+      return '<div><b>' + (i + 1) + '. ' + esc(x.nombre) + '</b>: ' + x.zonas.map(function (z) {
+        return typeof z === 'string' ? esc(z) : esc(z.nombre) + ' <span class="lim">(entre ' + esc(z.limites.join(', ')) + ')</span>';
+      }).join(' → ') + '</div>';
+    }).join('');
+    validar();
+  }
+  $('videos').oninput = previa;
+
+  function validar() {
+    $('go').disabled = !(cliente && (modo === 'prop' ? $('link').value.trim() : leerVideos().length));
+  }
+
+  var total = 2;
   $('go').onclick = function () {
     $('go').disabled = true;
     $('estado').style.display = 'block';
     $('res').innerHTML = ''; $('fase').textContent = 'Iniciando…'; $('barra').style.width = '5%'; $('detalle').textContent = '';
-    run('generar', cliente.id, $('link').value, $('titulo').value, $('puntos').value).then(function (r) {
+    var p = modo === 'prop'
+      ? run('generar', cliente.id, $('link').value, $('titulo').value, $('puntos').value)
+      : run('generarZonas', cliente.id, { contexto: $('ciudad').value.trim() || 'Ciudad Autónoma de Buenos Aires', subtitulo: '', videos: leerVideos() });
+    p.then(function (r) {
+      total = r.videos || 2;
       $('detalle').textContent = 'Se van a guardar en «' + r.carpeta + '».';
       seguir(r.pedido);
     }).catch(function (e) { fallo(msg(e)); });
@@ -132,7 +217,7 @@
   function seguir(pedido) {
     run('estado', pedido).then(function (s) {
       if (s.fase === 'listo') {
-        $('fase').textContent = 'Listo: los 2 videos están en Drive.';
+        $('fase').textContent = 'Listo: ' + (s.archivos.length === 1 ? 'el video está' : 'los ' + s.archivos.length + ' videos están') + ' en Drive.';
         $('barra').style.width = '100%';
         $('res').innerHTML = s.archivos.map(function (a) { return '<a href="' + a.url + '" target="_blank" rel="noopener">▶ ' + a.nombre.replace(/</g, '&lt;') + '</a>'; }).join('') +
           '<a href="' + s.carpeta + '" target="_blank" rel="noopener">Abrir la carpeta</a>';
@@ -141,7 +226,7 @@
       }
       if (s.fase === 'error') return fallo(s.mensaje);
       var min = Math.floor(s.segundos / 60);
-      $('fase').textContent = (s.fase === 'en cola' ? 'Esperando un servidor libre…' : 'Generando los videos…') + ' (' + min + ' min)';
+      $('fase').textContent = (s.fase === 'en cola' ? 'Esperando un servidor libre…' : s.fase === 'guardando' ? 'Guardando en Drive (' + s.hechos + ' de ' + s.total + ')…' : 'Generando los videos…') + ' (' + min + ' min)';
       $('barra').style.width = Math.min(95, 5 + 90 * s.segundos / ESTIMADO) + '%';
       setTimeout(function () { seguir(pedido); }, 15000);
     }).catch(function (e) {
