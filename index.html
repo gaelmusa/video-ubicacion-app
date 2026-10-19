@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video de ubicación · Invicta</title>
+<style>
+  :root { --bg: #f6f6f4; --card: #fff; --ink: #141414; --mute: #6b6b6b; --line: #e3e3df; --accent: #E4002B; --ok: #1d7a45; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--mute); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  label { display: block; font-weight: 600; margin: 18px 0 6px; }
+  label:first-child { margin-top: 0; }
+  input, textarea { width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: #fff; }
+  textarea { resize: vertical; }
+  input:focus, textarea:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .hint { color: var(--mute); font-size: 13px; margin-top: 6px; }
+  .lista { border: 1px solid var(--line); border-radius: 10px; margin-top: 6px; max-height: 240px; overflow: auto; display: none; }
+  .lista button { display: block; width: 100%; text-align: left; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line); background: #fff; font: inherit; cursor: pointer; }
+  .lista button:last-child { border-bottom: 0; }
+  .lista button:hover, .lista button:focus { background: #f1f1ee; }
+  .elegido { display: none; margin-top: 8px; padding: 10px 14px; border-radius: 10px; background: #f1f1ee; justify-content: space-between; align-items: center; gap: 12px; }
+  .elegido a { color: var(--mute); font-size: 14px; cursor: pointer; }
+  .go { margin-top: 24px; width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: 700 17px/1 inherit; font-family: inherit; cursor: pointer; }
+  .go:disabled { opacity: .45; cursor: default; }
+  .estado { margin-top: 20px; display: none; }
+  .barra { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 10px 0 6px; }
+  .barra i { display: block; height: 100%; width: 5%; background: var(--ink); transition: width 1s linear; }
+  .res a { display: block; margin-top: 8px; color: var(--ok); font-weight: 600; }
+  .err { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Video de ubicación</h1>
+  <p class="sub">Pegás el link de Google Maps y se generan 2 videos verticales de 7 s: la zona a 50 km y el entorno en 3D.</p>
+
+  <div class="card">
+    <label for="buscar">Cliente</label>
+    <input id="buscar" placeholder="Escribí parte del nombre…" autocomplete="off">
+    <div class="lista" id="lista"></div>
+    <div class="elegido" id="elegido"><strong id="elegidoNombre"></strong><a id="cambiar">Cambiar</a></div>
+    <div class="hint" id="cargando">Cargando clientes…</div>
+
+    <label for="link">Link de Google Maps</label>
+    <input id="link" placeholder="https://maps.app.goo.gl/… o el link largo" autocomplete="off">
+
+    <label for="titulo">Título en el video <span style="font-weight:400;color:var(--mute)">(opcional)</span></label>
+    <input id="titulo" placeholder="Si lo dejás vacío, usa el nombre del lugar" maxlength="80">
+
+    <label for="puntos">Puntos a destacar <span style="font-weight:400;color:var(--mute)">(opcional)</span></label>
+    <textarea id="puntos" rows="3" placeholder="Uno por renglón. Ej.: Aeropuerto de Rosario&#10;Shopping Alto Rosario&#10;Club: https://maps.app.goo.gl/…"></textarea>
+    <div class="hint">Podés poner solo el nombre del lugar, o «Nombre: link de Maps». Se muestran en los dos videos según la distancia.</div>
+
+    <button class="go" id="go" disabled>Generar y subir a Drive</button>
+
+    <div class="estado" id="estado">
+      <div id="fase">Iniciando…</div>
+      <div class="barra"><i id="barra"></i></div>
+      <div class="hint" id="detalle"></div>
+      <div class="res" id="res"></div>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  // La app de Apps Script responde como API; se llama sin cookies de Google para que
+  // funcione con cualquier cuenta (o ninguna) iniciada en el navegador.
+  var API = 'https://script.google.com/macros/s/AKfycbwjMvfXmM1VxN3NjsVgFyNGRaCcCUTJCNQ99hdCJ1SxsIXNItP3Z-144XGtX56y_cz6FA/exec';
+  function run(fn) {
+    var args = [].slice.call(arguments, 1);
+    var url = API + '?fn=' + encodeURIComponent(fn) + '&args=' + encodeURIComponent(JSON.stringify(args));
+    return fetch(url, { credentials: 'omit', redirect: 'follow' })
+      .then(function (r) { if (!r.ok) throw new Error('El servidor respondió ' + r.status); return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error); return j.data; });
+  }
+  function msg(e) { return (e && e.message) || String(e); }
+
+
+  var clientes = [], cliente = null;
+  var norm = function (s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+
+  run('listarClientes').then(function (l) { clientes = l; $('cargando').style.display = 'none'; })
+    .catch(function (e) { $('cargando').innerHTML = '<span class="err">' + msg(e) + '</span>'; });
+
+  function pintar() {
+    var q = norm($('buscar').value.trim());
+    var l = $('lista');
+    l.innerHTML = '';
+    if (!q) { l.style.display = 'none'; return; }
+    var m = clientes.filter(function (c) { return norm(c.nombre).indexOf(q) >= 0; }).slice(0, 30);
+    m.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = c.nombre;
+      b.onclick = function () { elegir(c); };
+      l.appendChild(b);
+    });
+    if (!m.length) l.innerHTML = '<div class="hint" style="padding:10px 14px">Sin resultados</div>';
+    l.style.display = 'block';
+  }
+  function elegir(c) {
+    cliente = c;
+    $('elegidoNombre').textContent = c.nombre;
+    $('elegido').style.display = 'flex';
+    $('buscar').style.display = 'none'; $('lista').style.display = 'none';
+    validar();
+  }
+  $('cambiar').onclick = function () {
+    cliente = null; $('elegido').style.display = 'none';
+    $('buscar').style.display = 'block'; $('buscar').value = ''; $('buscar').focus(); validar();
+  };
+  $('buscar').oninput = pintar;
+  $('buscar').onkeydown = function (e) { if (e.key === 'Enter') { var b = $('lista').querySelector('button'); if (b) b.click(); } };
+  $('link').oninput = validar;
+  function validar() { $('go').disabled = !(cliente && $('link').value.trim()); }
+
+  $('go').onclick = function () {
+    $('go').disabled = true;
+    $('estado').style.display = 'block';
+    $('res').innerHTML = ''; $('fase').textContent = 'Iniciando…'; $('barra').style.width = '5%'; $('detalle').textContent = '';
+    run('generar', cliente.id, $('link').value, $('titulo').value, $('puntos').value).then(function (r) {
+      $('detalle').textContent = 'Se van a guardar en «' + r.carpeta + '».';
+      seguir(r.pedido);
+    }).catch(function (e) { fallo(msg(e)); });
+  };
+
+  var ESTIMADO = 15 * 60; // segundos aproximados de un render en GitHub
+  function seguir(pedido) {
+    run('estado', pedido).then(function (s) {
+      if (s.fase === 'listo') {
+        $('fase').textContent = 'Listo: los 2 videos están en Drive.';
+        $('barra').style.width = '100%';
+        $('res').innerHTML = s.archivos.map(function (a) { return '<a href="' + a.url + '" target="_blank" rel="noopener">▶ ' + a.nombre.replace(/</g, '&lt;') + '</a>'; }).join('') +
+          '<a href="' + s.carpeta + '" target="_blank" rel="noopener">Abrir la carpeta</a>';
+        $('go').disabled = false;
+        return;
+      }
+      if (s.fase === 'error') return fallo(s.mensaje);
+      var min = Math.floor(s.segundos / 60);
+      $('fase').textContent = (s.fase === 'en cola' ? 'Esperando un servidor libre…' : 'Generando los videos…') + ' (' + min + ' min)';
+      $('barra').style.width = Math.min(95, 5 + 90 * s.segundos / ESTIMADO) + '%';
+      setTimeout(function () { seguir(pedido); }, 15000);
+    }).catch(function (e) {
+      $('detalle').textContent = 'Reintentando… (' + msg(e) + ')';
+      setTimeout(function () { seguir(pedido); }, 20000);
+    });
+  }
+  function fallo(t) {
+    $('fase').innerHTML = '<span class="err">No se pudo generar: ' + String(t).replace(/</g, '&lt;') + '</span>';
+    $('go').disabled = false;
+  }
+})();
+</script>
+</body>
+</html>
