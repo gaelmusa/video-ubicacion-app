@@ -40,6 +40,18 @@
   .previa div { padding: 8px 12px; border-radius: 8px; background: #f1f1ee; margin-top: 6px; }
   .previa b { font-weight: 600; }
   .previa .lim { color: var(--mute); font-size: 13px; }
+  .selector { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .opcion { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; font: inherit; color: var(--ink); cursor: pointer; transition: border-color .15s, background .15s; }
+  .opcion:hover { border-color: #c9c8c2; }
+  .opcion:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .opcion .punto { flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 50%; border: 2px solid #b9b8b2; display: grid; place-items: center; }
+  .opcion .punto::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+  .opcion b { display: block; font-size: 15px; font-weight: 600; }
+  .opcion small { display: block; color: var(--mute); font-size: 12.5px; margin-top: 2px; }
+  .opcion[aria-checked="true"] { border-color: var(--ink); background: #fafaf8; }
+  .opcion[aria-checked="true"] .punto { border-color: var(--ink); }
+  .opcion[aria-checked="true"] .punto::after { background: var(--ink); }
+  @media (max-width: 420px) { .selector { grid-template-columns: 1fr; } }
   .alt { display: inline-block; margin-top: 10px; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
   .aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff6e0; border: 1px solid #f0d68a; color: #5c4400; font-size: 14px; }
   .okc { color: var(--ok); font-weight: 600; }
@@ -57,19 +69,21 @@
   </div>
 
   <div class="card">
-    <label for="buscar">Cliente</label>
+    <label id="lblDestino">Dónde guardar los videos</label>
+    <div class="selector" role="radiogroup" aria-labelledby="lblDestino">
+      <button type="button" class="opcion" role="radio" aria-checked="true" id="optCliente"><span class="punto"></span><span><b>Seleccionar cliente</b><small>Carpeta «Material Productos» del cliente</small></span></button>
+      <button type="button" class="opcion" role="radio" aria-checked="false" id="optPropia"><span class="punto"></span><span><b>Mi propia carpeta</b><small>Cualquier carpeta de Google Drive</small></span></button>
+    </div>
     <div id="porCliente">
       <input id="buscar" placeholder="Escribí parte del nombre…" autocomplete="off">
       <div class="lista" id="lista"></div>
       <div class="elegido" id="elegido"><strong id="elegidoNombre"></strong><a id="cambiar">Cambiar</a></div>
       <div class="hint" id="cargando">Cargando clientes…</div>
-      <button type="button" class="alt" id="usarPropia">Seleccionar mi propia ubicación de Drive</button>
     </div>
     <div id="propia" style="display:none">
       <input id="carpeta" placeholder="Enlace de la carpeta: https://drive.google.com/drive/folders/…" autocomplete="off">
       <div class="aviso">Recordá que los permisos de la carpeta tienen que estar abiertos al público para que pueda acceder a esta carpeta de Google Drive: <b>Compartir → Acceso general → «Cualquier persona con el enlace» → Editor</b>.</div>
       <div class="hint" id="carpetaEstado"></div>
-      <button type="button" class="alt" id="usarCliente">Elegir un cliente de la lista</button>
     </div>
 
     <div class="modo on" id="modoProp">
@@ -208,8 +222,24 @@
 
   // ---------- destino: cliente de la lista o carpeta propia de Drive ----------
   var destinoModo = 'cliente', carpetaOk = null, revisar = null;
-  $('usarPropia').onclick = function () { destinoModo = 'propia'; $('porCliente').style.display = 'none'; $('propia').style.display = 'block'; $('carpeta').focus(); validar(); };
-  $('usarCliente').onclick = function () { destinoModo = 'cliente'; $('propia').style.display = 'none'; $('porCliente').style.display = 'block'; validar(); };
+  function setDestino(m) {
+    destinoModo = m;
+    $('optCliente').setAttribute('aria-checked', m === 'cliente');
+    $('optPropia').setAttribute('aria-checked', m === 'propia');
+    $('porCliente').style.display = m === 'cliente' ? 'block' : 'none';
+    $('propia').style.display = m === 'propia' ? 'block' : 'none';
+    validar();
+  }
+  $('optCliente').onclick = function () { setDestino('cliente'); if (!cliente) $('buscar').focus(); };
+  $('optPropia').onclick = function () { setDestino('propia'); $('carpeta').focus(); };
+  // flechas del teclado dentro del selector, como un grupo de opciones
+  [$('optCliente'), $('optPropia')].forEach(function (b) {
+    b.onkeydown = function (e) {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(e.key) < 0) return;
+      e.preventDefault();
+      (destinoModo === 'cliente' ? $('optPropia') : $('optCliente')).click();
+    };
+  });
   $('carpeta').oninput = function () {
     carpetaOk = null; validar();
     clearTimeout(revisar);
