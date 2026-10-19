@@ -48,9 +48,25 @@
   .opcion .punto::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
   .opcion b { display: block; font-size: 15px; font-weight: 600; }
   .opcion small { display: block; color: var(--mute); font-size: 12.5px; margin-top: 2px; }
-  .opcion[aria-checked="true"] { border-color: var(--ink); background: #fafaf8; }
-  .opcion[aria-checked="true"] .punto { border-color: var(--ink); }
-  .opcion[aria-checked="true"] .punto::after { background: var(--ink); }
+  /* Cliente = verde claro, carpeta propia = azul claro; el campo de abajo toma el mismo color */
+  :root { --verde: #2f8a4f; --verde-borde: #bfe0ca; --verde-fondo: #eef8f1; --verde-campo: #f6fbf8;
+          --azul: #2f6db8; --azul-borde: #c3d8f2; --azul-fondo: #edf4fd; --azul-campo: #f6f9fe; }
+  #optCliente { background: var(--verde-fondo); border-color: var(--verde-borde); }
+  #optPropia { background: var(--azul-fondo); border-color: var(--azul-borde); }
+  #optCliente .punto { border-color: #8cc4a0; }
+  #optPropia .punto { border-color: #93b6e3; }
+  #optCliente[aria-checked="true"] { border-color: var(--verde); box-shadow: 0 0 0 3px rgba(47, 138, 79, .15); }
+  #optPropia[aria-checked="true"] { border-color: var(--azul); box-shadow: 0 0 0 3px rgba(47, 109, 184, .15); }
+  #optCliente[aria-checked="true"] .punto { border-color: var(--verde); }
+  #optCliente[aria-checked="true"] .punto::after { background: var(--verde); }
+  #optPropia[aria-checked="true"] .punto { border-color: var(--azul); }
+  #optPropia[aria-checked="true"] .punto::after { background: var(--azul); }
+  #optCliente[aria-checked="false"], #optPropia[aria-checked="false"] { opacity: .75; }
+  #buscar, #porCliente .elegido { border: 1.5px solid var(--verde); background: var(--verde-campo); }
+  #buscar:focus { outline-color: var(--verde); }
+  #porCliente .lista { border-color: var(--verde-borde); }
+  #carpeta { border: 1.5px solid var(--azul); background: var(--azul-campo); }
+  #carpeta:focus { outline-color: var(--azul); }
   @media (max-width: 420px) { .selector { grid-template-columns: 1fr; } }
   .alt { display: inline-block; margin-top: 10px; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
   .aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff6e0; border: 1px solid #f0d68a; color: #5c4400; font-size: 14px; }
