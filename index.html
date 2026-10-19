@@ -40,6 +40,9 @@
   .previa div { padding: 8px 12px; border-radius: 8px; background: #f1f1ee; margin-top: 6px; }
   .previa b { font-weight: 600; }
   .previa .lim { color: var(--mute); font-size: 13px; }
+  .alt { display: inline-block; margin-top: 10px; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
+  .aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff6e0; border: 1px solid #f0d68a; color: #5c4400; font-size: 14px; }
+  .okc { color: var(--ok); font-weight: 600; }
   code { background: #f1f1ee; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
 </style>
 </head>
@@ -55,10 +58,19 @@
 
   <div class="card">
     <label for="buscar">Cliente</label>
-    <input id="buscar" placeholder="Escribí parte del nombre…" autocomplete="off">
-    <div class="lista" id="lista"></div>
-    <div class="elegido" id="elegido"><strong id="elegidoNombre"></strong><a id="cambiar">Cambiar</a></div>
-    <div class="hint" id="cargando">Cargando clientes…</div>
+    <div id="porCliente">
+      <input id="buscar" placeholder="Escribí parte del nombre…" autocomplete="off">
+      <div class="lista" id="lista"></div>
+      <div class="elegido" id="elegido"><strong id="elegidoNombre"></strong><a id="cambiar">Cambiar</a></div>
+      <div class="hint" id="cargando">Cargando clientes…</div>
+      <button type="button" class="alt" id="usarPropia">Seleccionar mi propia ubicación de Drive</button>
+    </div>
+    <div id="propia" style="display:none">
+      <input id="carpeta" placeholder="Enlace de la carpeta: https://drive.google.com/drive/folders/…" autocomplete="off">
+      <div class="aviso">Recordá que los permisos de la carpeta tienen que estar abiertos al público para que pueda acceder a esta carpeta de Google Drive: <b>Compartir → Acceso general → «Cualquier persona con el enlace» → Editor</b>.</div>
+      <div class="hint" id="carpetaEstado"></div>
+      <button type="button" class="alt" id="usarCliente">Elegir un cliente de la lista</button>
+    </div>
 
     <div class="modo on" id="modoProp">
     <label for="link">Link de Google Maps</label>
@@ -194,8 +206,33 @@
   }
   $('videos').oninput = previa;
 
+  // ---------- destino: cliente de la lista o carpeta propia de Drive ----------
+  var destinoModo = 'cliente', carpetaOk = null, revisar = null;
+  $('usarPropia').onclick = function () { destinoModo = 'propia'; $('porCliente').style.display = 'none'; $('propia').style.display = 'block'; $('carpeta').focus(); validar(); };
+  $('usarCliente').onclick = function () { destinoModo = 'cliente'; $('propia').style.display = 'none'; $('porCliente').style.display = 'block'; validar(); };
+  $('carpeta').oninput = function () {
+    carpetaOk = null; validar();
+    clearTimeout(revisar);
+    var url = $('carpeta').value.trim();
+    if (!url) { $('carpetaEstado').textContent = ''; return; }
+    $('carpetaEstado').textContent = 'Revisando la carpeta…';
+    revisar = setTimeout(function () {
+      run('verificarCarpeta', url).then(function (c) {
+        if ($('carpeta').value.trim() !== url) return;
+        carpetaOk = c;
+        $('carpetaEstado').innerHTML = '<span class="okc">✓ Se va a guardar en «' + esc(c.nombre) + '».</span>';
+        validar();
+      }).catch(function (e) {
+        if ($('carpeta').value.trim() !== url) return;
+        $('carpetaEstado').innerHTML = '<span class="err">' + esc(msg(e)) + '</span>';
+      });
+    }, 700);
+  };
+  function destino() { return destinoModo === 'cliente' ? cliente.id : { carpeta: $('carpeta').value.trim() }; }
+
   function validar() {
-    $('go').disabled = !(cliente && (modo === 'prop' ? $('link').value.trim() : leerVideos().length));
+    var hayDestino = destinoModo === 'cliente' ? !!cliente : !!carpetaOk;
+    $('go').disabled = !(hayDestino && (modo === 'prop' ? $('link').value.trim() : leerVideos().length));
   }
 
   var total = 2;
@@ -204,8 +241,8 @@
     $('estado').style.display = 'block';
     $('res').innerHTML = ''; $('fase').textContent = 'Iniciando…'; $('barra').style.width = '5%'; $('detalle').textContent = '';
     var p = modo === 'prop'
-      ? run('generar', cliente.id, $('link').value, $('titulo').value, $('puntos').value)
-      : run('generarZonas', cliente.id, { contexto: $('ciudad').value.trim() || 'Ciudad Autónoma de Buenos Aires', subtitulo: '', videos: leerVideos() });
+      ? run('generar', destino(), $('link').value, $('titulo').value, $('puntos').value)
+      : run('generarZonas', destino(), { contexto: $('ciudad').value.trim() || 'Ciudad Autónoma de Buenos Aires', subtitulo: '', videos: leerVideos() });
     p.then(function (r) {
       total = r.videos || 2;
       $('detalle').textContent = 'Se van a guardar en «' + r.carpeta + '».';
