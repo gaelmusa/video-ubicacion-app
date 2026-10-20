@@ -69,7 +69,8 @@ Videos de **zonas**. `pedido` es un objeto:
 - `"CABA"` o el nombre de la ciudad del `contexto` dibuja la ciudad entera.
 - Barrios sin límites oficiales (Barrio Norte, Microcentro, Palermo Soho…): pasá `limites` con sus calles límite, sacadas de una fuente que puedas citar. Sin `limites` se dibuja un círculo de 800 m y queda aproximado.
 - Límites: hasta 12 videos por pedido, 6 zonas por video y 6000 caracteres en total.
-- Cómo pasar de un guion a un pedido: un video por cada gancho o bloque del cuerpo que nombre lugares, con las zonas en el orden del guion (si eso obliga a ir y volver por el mapa, ordenalas geográficamente y avisá).
+- Cómo pasar de un guion a un pedido: un video por cada gancho o bloque del cuerpo que nombre lugares, con las zonas en el orden en que se nombran (el editor las sincroniza con la voz en off). Si ese orden obliga a ir y volver por el mapa, preguntale a la persona si prefiere el orden geográfico. Una frase que describe un recorrido («de Florida a Cabildo, pasando por…») se arma como recorrido. Si un bloque habla de «la Ciudad» en general, reusá el video de la ciudad entera.
+- El `nombre` de cada video es el nombre del archivo: usá la numeración del guion (ej. «Hook 4 - Recoleta Barrio Norte Retiro»).
 
 ### `estado(pedido)` → según `fase`
 - `"en cola"` o `"generando"`: `{ "fase", "segundos" }`.
