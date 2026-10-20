@@ -1,0 +1,111 @@
+# Video de ubicación · Invicta
+
+> Herramienta de Invicta (agencia de marketing inmobiliario, Argentina) que genera videos verticales de mapa 3D (MP4 H.264, 1080×1920, 7 s) para anuncios, y los guarda en Google Drive. Se usa por HTTP con pedidos GET simples, sin autenticación. English summary: generates 7-second vertical 3D map videos (a property from a Google Maps link, or neighborhoods/streets/cities) and saves them to Google Drive; plain HTTP GET API, no auth.
+
+La página https://gaelmusa.github.io/video-ubicacion-app/ es un formulario para personas. Los agentes de IA usen la API de abajo.
+
+## Qué genera
+
+- **Propiedad**: a partir de un link de Google Maps (corto `maps.app.goo.gl/…`, largo, o coordenadas `-34.6,-58.4`) genera 2 videos:
+  1. «Ubicación 50 km»: vista desde arriba que baja hasta la propiedad, con la ciudad donde está y ciudades grandes cercanas.
+  2. «Entorno»: vista de pájaro en 3D girando alrededor de la propiedad, con la calle iluminada y lugares de interés cercanos.
+- **Zonas**: un video por cada recorrido pedido. La cámara recorre las zonas en el orden dado (barrios, calles o una ciudad entera) y cada una se ilumina al llegar. Sirve para mostrar en qué zonas está la oferta de un anuncio (ej. «Recoleta, Palermo o Belgrano»).
+
+Los videos se guardan en Google Drive:
+- en la carpeta «Material Productos» de un cliente de Invicta (destino = id del cliente), o
+- en cualquier carpeta de Google Drive **abierta al público con permiso de Editor** (destino = `{"carpeta": "enlace"}`).
+
+## Cómo llamar a la API
+
+Base: `https://script.google.com/macros/s/AKfycbwjMvfXmM1VxN3NjsVgFyNGRaCcCUTJCNQ99hdCJ1SxsIXNItP3Z-144XGtX56y_cz6FA/exec`
+
+Pedido: `GET {base}?fn={función}&args={JSON con la lista de argumentos, codificado para URL}`
+
+- Hay que **seguir redirecciones** (la respuesta llega desde `script.googleusercontent.com`). Con curl: `curl -sL`.
+- No mandes cookies de Google (en navegador: `fetch(url, {credentials: "omit"})`).
+- Respuesta siempre en JSON: `{"ok": true, "data": …}` o `{"ok": false, "error": "mensaje para mostrarle a la persona"}`.
+
+Ejemplo:
+
+```bash
+BASE='https://script.google.com/macros/s/AKfycbwjMvfXmM1VxN3NjsVgFyNGRaCcCUTJCNQ99hdCJ1SxsIXNItP3Z-144XGtX56y_cz6FA/exec'
+curl -sL "$BASE?fn=listarClientes&args=%5B%5D"
+```
+
+## Funciones
+
+### `listarClientes()` → `[{ "id", "nombre" }]`
+Clientes de Invicta (carpetas de «Clientes Activos»). Buscá por nombre sin importar mayúsculas ni tildes. `args=[]`.
+
+### `verificarCarpeta(enlace)` → `{ "id", "nombre", "url" }`
+Revisa que se pueda guardar en una carpeta propia. Llamala **antes** de generar con destino carpeta. Si falla, el error explica qué permiso falta: mostráselo a la persona tal cual. La carpeta tiene que estar compartida así: Compartir → Acceso general → «Cualquier persona con el enlace» → Editor.
+
+### `generar(destino, link, titulo, puntos)` → `{ "pedido", "carpeta" }`
+Videos de **propiedad**.
+- `destino`: id de cliente (texto) o `{"carpeta": "https://drive.google.com/drive/folders/…"}`.
+- `link`: link de Google Maps o coordenadas.
+- `titulo` (opcional, `""`): título en pantalla; si va vacío usa el nombre del lugar o la dirección.
+- `puntos` (opcional, `""`): lugares a destacar, uno por renglón (`\n`), como «Nombre» o «Nombre: link de Maps».
+
+### `generarZonas(destino, pedido)` → `{ "pedido", "carpeta", "videos" }`
+Videos de **zonas**. `pedido` es un objeto:
+
+```json
+{
+  "contexto": "Ciudad Autónoma de Buenos Aires",
+  "subtitulo": "Ciudad de Buenos Aires",
+  "videos": [
+    { "nombre": "Gancho 1", "zonas": ["Recoleta", "Palermo", "Belgrano"] },
+    { "nombre": "Gancho 2", "zonas": ["CABA"], "subtitulo": "Argentina" },
+    { "nombre": "Gancho 4", "zonas": ["Recoleta", { "nombre": "Barrio Norte", "limites": ["Av. Córdoba", "Av. 9 de Julio", "Av. del Libertador", "Av. Coronel Díaz"] }, "Retiro"] },
+    { "nombre": "Cuerpo", "zonas": ["Calle Florida", "Recoleta", "Palermo", "Belgrano", "Av. Cabildo"] }
+  ]
+}
+```
+
+- `contexto`: ciudad donde se buscan las zonas (cualquier ciudad; por defecto CABA).
+- Cada zona es texto o un objeto `{ "nombre", "etiqueta"?, "tipo"?: "barrio" | "calle" | "ciudad", "limites"?: [calles en orden alrededor de la zona] }`.
+- Las calles empiezan con `Calle`, `Av.`, `Bv.`, `Pasaje` o `Diagonal`, o llevan `"tipo": "calle"`.
+- `"CABA"` o el nombre de la ciudad del `contexto` dibuja la ciudad entera.
+- Barrios sin límites oficiales (Barrio Norte, Microcentro, Palermo Soho…): pasá `limites` con sus calles límite, sacadas de una fuente que puedas citar. Sin `limites` se dibuja un círculo de 800 m y queda aproximado.
+- Límites: hasta 12 videos por pedido, 6 zonas por video y 6000 caracteres en total.
+- Cómo pasar de un guion a un pedido: un video por cada gancho o bloque del cuerpo que nombre lugares, con las zonas en el orden del guion (si eso obliga a ir y volver por el mapa, ordenalas geográficamente y avisá).
+
+### `estado(pedido)` → según `fase`
+- `"en cola"` o `"generando"`: `{ "fase", "segundos" }`.
+- `"guardando"`: `{ "fase", "hechos", "total", "segundos" }` (guardando en Drive).
+- `"listo"`: `{ "fase", "archivos": [{ "nombre", "url" }], "carpeta" }`.
+- `"error"`: `{ "fase", "mensaje" }`.
+
+**Importante:** los videos se guardan en Drive **mientras se consulta** `estado`. Consultá cada 30–60 s **hasta `listo` o `error`**. Si nadie consulta, los videos quedan sin guardar (GitHub los conserva 3 días).
+
+## Tiempos
+
+Los genera GitHub Actions sin placa de video:
+- propiedad: unos 15–30 min;
+- zonas: 15–60 min por video, en paralelo; el pedido tarda lo que el video más largo.
+
+Avisale a la persona cuánto va a tardar. Si no podés quedarte consultando tanto tiempo, dale el número de pedido y la app web para seguirlo.
+
+## Ejemplo completo (zonas a la carpeta de un cliente)
+
+```bash
+BASE='https://script.google.com/macros/s/AKfycbwjMvfXmM1VxN3NjsVgFyNGRaCcCUTJCNQ99hdCJ1SxsIXNItP3Z-144XGtX56y_cz6FA/exec'
+call() { curl -sL "$BASE?fn=$1&args=$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$2")"; }
+
+call listarClientes '[]'                                    # → buscar el id del cliente
+call generarZonas '["ID_DEL_CLIENTE", {"contexto":"CABA","subtitulo":"Ciudad de Buenos Aires","videos":[{"nombre":"Gancho 1","zonas":["Recoleta","Palermo"]}]}]'
+call estado '["PEDIDO"]'                                    # repetir cada 30–60 s hasta "listo"
+```
+
+Con carpeta propia, el destino es un objeto: `call generar '[{"carpeta":"https://drive.google.com/drive/folders/…"}, "https://maps.app.goo.gl/…", "", ""]'`.
+
+## Avisos que hay que darle a la persona
+
+- El 3D usa un token de Cesium del plan gratis, que no permite uso comercial: antes de pautar hay que pasar al plan comercial.
+- Las zonas sin límites oficiales son aproximadas; decí de dónde salieron los límites.
+- Revisá los videos antes de darlos por buenos (contornos visibles, nombres que no se pisan, orden correcto).
+
+## Si tenés Claude Code en la Mac de Invicta
+
+Usá la habilidad `videos-de-ubicacion`: hace lo mismo y además genera en la Mac en 1–1,5 min por video, para entregar por el chat sin esperar a GitHub.
