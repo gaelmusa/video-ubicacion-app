@@ -107,6 +107,16 @@ Con carpeta propia, el destino es un objeto: `call generar '[{"carpeta":"https:/
 - Las zonas sin límites oficiales son aproximadas; decí de dónde salieron los límites.
 - Revisá los videos antes de darlos por buenos (contornos visibles, nombres que no se pisan, orden correcto).
 
-## Si tenés Claude Code en la Mac de Invicta
+## Habilidad para Claude Code
 
-Usá la habilidad `videos-de-ubicacion`: hace lo mismo y además genera en la Mac en 1–1,5 min por video, para entregar por el chat sin esperar a GitHub.
+Instalación (una vez por Mac):
+
+```bash
+curl -sL https://gaelmusa.github.io/video-ubicacion-app/videos-de-ubicacion-habilidad.zip -o /tmp/videos-de-ubicacion.zip && mkdir -p ~/.claude/skills && unzip -o /tmp/videos-de-ubicacion.zip -d ~/.claude/skills/
+```
+
+Después, en un chat nuevo de Claude Code alcanza con pedir «generale los mapas a este guion» o «los videos de ubicación de este link». La habilidad usa esta misma API (modo solo Drive). En la Mac de Invicta, que tiene el motor instalado, además genera en 1–1,5 min por video para entregar por el chat sin esperar a GitHub.
+
+## Cómo se mueve la cámara (zonas)
+
+Arranca alta y cenital. Las zonas grandes (una ciudad) se muestran casi cenitales y enteras. La cámara nunca baja más que la distancia que tiene que recorrer, y entre zonas lejanas sube hasta ver las dos antes de bajar a la siguiente, para evitar movimientos rápidos cerca del suelo.
