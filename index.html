@@ -31,7 +31,7 @@
   .estado { margin-top: 20px; display: none; }
   .barra { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; margin: 10px 0 6px; }
   .barra i { display: block; height: 100%; width: 5%; background: var(--ink); transition: width 1s linear; }
-  .res a { display: block; margin-top: 8px; color: var(--ok); font-weight: 600; }
+
   .err { color: var(--accent); font-weight: 600; }
   .tabs { display: flex; gap: 6px; background: #ecebe7; padding: 4px; border-radius: 12px; margin-bottom: 16px; }
   .tabs button { flex: 1; border: 0; background: transparent; padding: 10px; border-radius: 9px; font: 600 15px/1 inherit; font-family: inherit; color: var(--mute); cursor: pointer; }
@@ -77,6 +77,18 @@
   .alt { display: inline-block; margin-top: 10px; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
   .aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff6e0; border: 1px solid #f0d68a; color: #5c4400; font-size: 14px; }
   .okc { color: var(--ok); font-weight: 600; }
+  .botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; font-family: inherit; font-weight: 600; font-size: 14px; line-height: 1.2; text-decoration: none; cursor: pointer; border: 2px solid var(--borde); background: #fff; color: var(--ink); }
+  .btn:hover { background: #f1f1ee; }
+  .btn.primario { background: var(--verde); border-color: var(--verde); color: #fff; }
+  .btn.primario:hover { background: #17582f; }
+  .btn.chico { padding: 6px 10px; font-size: 13px; border-width: 1.5px; color: var(--mute); border-color: #b9b8b2; }
+  .btn svg { width: 16px; height: 16px; flex: none; }
+  .btn.copiado { border-color: var(--verde); color: var(--verde); }
+  .videos { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .videos .btn { justify-content: flex-start; }
+  .pedido .barra { margin: 8px 0 4px; }
+  .pct { color: var(--mute); font-size: 13px; }
   #misPedidos h2 { font-size: 17px; margin: 0 0 6px; }
   .pedido { padding: 12px 0; border-top: 1px solid var(--line); }
   .pedido:first-of-type { border-top: 0; }
@@ -299,7 +311,7 @@
   // ---------- Pedidos: se recuerdan en este navegador ----------
   // Recargar o cerrar la página no frena nada: los videos se generan en GitHub y el último paso de
   // GitHub los guarda en Drive. Esta lista solo muestra cómo van y, al final, los links.
-  var CLAVE = 'vu_pedidos', DIA = 864e5, ESTIMADO = 15 * 60;
+  var CLAVE = 'vu_pedidos', DIA = 864e5;
   function leerPedidos() {
     try { return JSON.parse(localStorage.getItem(CLAVE) || '[]'); } catch (e) { return []; }
   }
@@ -316,23 +328,42 @@
     var min = Math.floor((s.segundos || 0) / 60);
     if (s.fase === 'listo') return 'Listo: ' + (s.archivos.length === 1 ? 'el video está' : 'los ' + s.archivos.length + ' videos están') + ' en Drive.';
     if (s.fase === 'error') return 'No se pudo generar: ' + s.mensaje;
-    if (s.fase === 'guardando') return 'Guardando en Drive (' + s.hechos + ' de ' + s.total + ')… (' + min + ' min)';
-    return (s.fase === 'en cola' ? 'Esperando un servidor libre…' : 'Generando los videos…') + ' (' + min + ' min)';
+    if (s.fase === 'guardando') return 'Guardando en Drive (' + s.hechos + ' de ' + s.total + ')… · ' + min + ' min';
+    if (s.fase === 'uniendo') return 'Uniendo las partes… · ' + min + ' min';
+    if (s.fase === 'en cola') return 'Esperando servidores libres… · ' + min + ' min';
+    return 'Generando los videos… · ' + min + ' min';
   }
-  function linksDe(s) {
-    return s.archivos.map(function (a) { return '<a href="' + a.url + '" target="_blank" rel="noopener">▶ ' + esc(a.nombre) + '</a>'; }).join('') +
-      '<a href="' + s.carpeta + '" target="_blank" rel="noopener">Abrir la carpeta</a>';
+  // Porcentaje real: cuadros generados sobre el total (lo informa cada parte en GitHub)
+  function porcentaje(s) {
+    if (!s) return 2;
+    if (s.fase === 'listo') return 100;
+    if (s.fase === 'error') return 100;
+    if (s.fase === 'en cola') return 3;
+    if (s.fase === 'uniendo') return 92;
+    if (s.fase === 'guardando') return 93 + Math.round(6 * (s.hechos || 0) / (s.total || 1));
+    return Math.round(5 + 85 * (s.avance || 0));
   }
+  var ICONO_COPIAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  var ICONO_CARPETA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+  function botonesCarpeta(url) {
+    if (!url) return '';
+    return '<a class="btn primario" href="' + url + '" target="_blank" rel="noopener">' + ICONO_CARPETA + 'Abrir la carpeta</a>' +
+      '<button type="button" class="btn" data-copiar="' + url + '">' + ICONO_COPIAR + '<span>Copiar link</span></button>';
+  }
+  function videosDe(s) {
+    return '<div class="videos">' + s.archivos.map(function (a) { return '<a class="btn" href="' + a.url + '" target="_blank" rel="noopener">▶ ' + esc(a.nombre) + '</a>'; }).join('') + '</div>';
+  }
+  function urlCarpeta(x) { return x.carpetaUrl || (x.estado && x.estado.carpeta) || ''; }
   function pintarActual() {
     if (!actual) return;
     var x = pedidos.filter(function (y) { return y.pedido === actual; })[0];
     if (!x) return;
-    var s = x.estado;
+    var s = x.estado, pct = porcentaje(s);
     $('estado').style.display = 'block';
     $('detalle').textContent = 'Se van a guardar en «' + x.carpeta + '». Podés cerrar o recargar la página: el pedido sigue y se guarda solo.';
-    $('fase').innerHTML = s && s.fase === 'error' ? '<span class="err">' + esc(textoEstado(s)) + '</span>' : esc(textoEstado(s));
-    $('barra').style.width = s && s.fase === 'listo' ? '100%' : Math.min(95, 5 + 90 * ((s && s.segundos) || 0) / ESTIMADO) + '%';
-    $('res').innerHTML = s && s.fase === 'listo' ? linksDe(s) : '';
+    $('fase').innerHTML = (s && s.fase === 'error' ? '<span class="err">' + esc(textoEstado(s)) + '</span>' : esc(textoEstado(s))) + (s && s.fase !== 'error' && s.fase !== 'listo' ? ' <span class="pct">· ' + pct + '%</span>' : '');
+    $('barra').style.width = pct + '%';
+    $('res').innerHTML = (s && s.fase === 'listo' ? videosDe(s) : '') + '<div class="botones">' + botonesCarpeta(urlCarpeta(x)) + '</div>';
     if (s && (s.fase === 'listo' || s.fase === 'error')) validar();
   }
   function pintarLista() {
@@ -341,17 +372,40 @@
     if (!otros.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
     cont.style.display = 'block';
     cont.innerHTML = '<h2>Tus pedidos</h2>' + otros.map(function (x) {
-      var s = x.estado, fin = s && (s.fase === 'listo' || s.fase === 'error');
+      var s = x.estado, fin = s && (s.fase === 'listo' || s.fase === 'error'), pct = porcentaje(s);
       var cuando = new Date(x.inicio).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
       return '<div class="pedido"><div class="ptit"><b>' + esc(x.titulo) + '</b><span>' + cuando + '</span></div>' +
         '<div class="hint">Carpeta: ' + esc(x.carpeta) + '</div>' +
-        '<div class="' + (s && s.fase === 'error' ? 'err' : 'pest') + '">' + esc(textoEstado(s)) + '</div>' +
-        (s && s.fase === 'listo' ? '<div class="res">' + linksDe(s) + '</div>' : '') +
-        (fin ? '<button type="button" class="alt" data-quitar="' + x.pedido + '">Quitar de la lista</button>' : '') + '</div>';
+        (fin ? '' : '<div class="barra"><i style="width:' + pct + '%"></i></div>') +
+        '<div class="' + (s && s.fase === 'error' ? 'err' : 'pest') + '">' + esc(textoEstado(s)) + (fin ? '' : ' <span class="pct">· ' + pct + '%</span>') + '</div>' +
+        (s && s.fase === 'listo' ? videosDe(s) : '') +
+        '<div class="botones">' + botonesCarpeta(urlCarpeta(x)) +
+        (fin ? '<button type="button" class="btn chico" data-quitar="' + x.pedido + '">Quitar de la lista</button>' : '') + '</div></div>';
     }).join('');
   }
+  // Copiar el link de la carpeta (con respaldo para navegadores sin acceso al portapapeles)
+  function copiar(texto, boton) {
+    var ok = function () {
+      var span = boton.querySelector('span'); var antes = span.textContent;
+      boton.classList.add('copiado'); span.textContent = '¡Copiado!';
+      setTimeout(function () { boton.classList.remove('copiado'); span.textContent = antes; }, 1800);
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(texto).then(ok, function () { respaldo(); });
+    else respaldo();
+    function respaldo() {
+      var t = document.createElement('textarea'); t.value = texto; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); ok(); } catch (e) { window.prompt('Copiá el link:', texto); }
+      document.body.removeChild(t);
+    }
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-copiar]');
+    if (b) copiar(b.getAttribute('data-copiar'), b);
+  });
   $('misPedidos').onclick = function (e) {
-    var id = e.target.getAttribute && e.target.getAttribute('data-quitar');
+    var q = e.target.closest && e.target.closest('[data-quitar]');
+    var id = q && q.getAttribute('data-quitar');
     if (!id) return;
     pedidos = pedidos.filter(function (x) { return x.pedido !== id; });
     grabarPedidos(pedidos); pintarLista();
@@ -385,7 +439,7 @@
       : run('generarZonas', destino(), { contexto: $('ciudad').value.trim() || 'Ciudad Autónoma de Buenos Aires', subtitulo: '', videos: leerVideos() });
     p.then(function (r) {
       var titulo = esProp ? 'Propiedad · ' + ($('titulo').value.trim() || $('link').value.trim().replace(/^https?:\/\//, '').slice(0, 40)) : 'Zonas · ' + (r.videos || 1) + (r.videos === 1 ? ' video' : ' videos');
-      pedidos.push({ pedido: r.pedido, titulo: titulo, carpeta: r.carpeta, inicio: Date.now(), estado: null });
+      pedidos.push({ pedido: r.pedido, titulo: titulo, carpeta: r.carpeta, carpetaUrl: r.carpetaUrl || '', inicio: Date.now(), estado: null });
       grabarPedidos(pedidos);
       actual = r.pedido;
       pintar();
