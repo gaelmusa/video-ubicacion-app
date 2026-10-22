@@ -82,11 +82,11 @@ Los videos se guardan solos en Drive cuando GitHub termina (el último paso de c
 
 ## Tiempos
 
-Los genera GitHub Actions sin placa de video:
-- propiedad: unos 15–30 min;
-- zonas: 15–60 min por video, en paralelo; el pedido tarda lo que el video más largo.
+Los genera GitHub Actions sin placa de video, partiendo cada video en tramos que se generan en paralelo:
+- propiedad: unos 10–15 min;
+- zonas: unos 10–20 min (más videos en el pedido = menos tramos por video).
 
-Avisale a la persona cuánto va a tardar. Si no podés quedarte consultando, dale a la persona el número de pedido: los videos van a aparecer solos en la carpeta.
+`estado` informa `avance` (0 a 1, cuadros generados sobre el total) mientras genera. Avisale a la persona cuánto va a tardar. Si no podés quedarte consultando, dale el número de pedido: los videos van a aparecer solos en la carpeta.
 
 ## Ejemplo completo (zonas a la carpeta de un cliente)
 
