@@ -77,6 +77,12 @@
   .alt { display: inline-block; margin-top: 10px; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
   .aviso { margin-top: 10px; padding: 12px 14px; border-radius: 10px; background: #fff6e0; border: 1px solid #f0d68a; color: #5c4400; font-size: 14px; }
   .okc { color: var(--ok); font-weight: 600; }
+  #misPedidos h2 { font-size: 17px; margin: 0 0 6px; }
+  .pedido { padding: 12px 0; border-top: 1px solid var(--line); }
+  .pedido:first-of-type { border-top: 0; }
+  .ptit { display: flex; justify-content: space-between; gap: 8px; }
+  .ptit span { color: var(--mute); font-size: 13px; white-space: nowrap; }
+  .pest { margin-top: 4px; }
   code { background: #f1f1ee; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
 </style>
 </head>
@@ -140,6 +146,7 @@
       <div class="res" id="res"></div>
     </div>
   </div>
+  <div id="misPedidos" class="card" style="display:none;margin-top:16px"></div>
   <p class="hint" style="margin-top:24px;text-align:center">Usar con Claude: <a href="videos-de-ubicacion-habilidad.zip">habilidad para Claude Code</a> · <a href="llms.txt">instrucciones para agentes de IA (API)</a></p>
 </main>
 <script>
@@ -289,46 +296,111 @@
     $('go').disabled = !(hayDestino && (modo === 'prop' ? $('link').value.trim() : leerVideos().length));
   }
 
-  var total = 2;
+  // ---------- Pedidos: se recuerdan en este navegador ----------
+  // Recargar o cerrar la página no frena nada: los videos se generan en GitHub y el último paso de
+  // GitHub los guarda en Drive. Esta lista solo muestra cómo van y, al final, los links.
+  var CLAVE = 'vu_pedidos', DIA = 864e5, ESTIMADO = 15 * 60;
+  function leerPedidos() {
+    try { return JSON.parse(localStorage.getItem(CLAVE) || '[]'); } catch (e) { return []; }
+  }
+  function grabarPedidos(l) { try { localStorage.setItem(CLAVE, JSON.stringify(l)); } catch (e) {} }
+  var pedidos = leerPedidos().filter(function (x) {
+    var fin = x.estado && (x.estado.fase === 'listo' || x.estado.fase === 'error');
+    return fin ? Date.now() - (x.fin || x.inicio) < DIA : Date.now() - x.inicio < 3 * DIA;
+  });
+  grabarPedidos(pedidos);
+  var actual = null; // el pedido que se acaba de lanzar desde esta pestaña
+
+  function textoEstado(s) {
+    if (!s) return 'Consultando…';
+    var min = Math.floor((s.segundos || 0) / 60);
+    if (s.fase === 'listo') return 'Listo: ' + (s.archivos.length === 1 ? 'el video está' : 'los ' + s.archivos.length + ' videos están') + ' en Drive.';
+    if (s.fase === 'error') return 'No se pudo generar: ' + s.mensaje;
+    if (s.fase === 'guardando') return 'Guardando en Drive (' + s.hechos + ' de ' + s.total + ')… (' + min + ' min)';
+    return (s.fase === 'en cola' ? 'Esperando un servidor libre…' : 'Generando los videos…') + ' (' + min + ' min)';
+  }
+  function linksDe(s) {
+    return s.archivos.map(function (a) { return '<a href="' + a.url + '" target="_blank" rel="noopener">▶ ' + esc(a.nombre) + '</a>'; }).join('') +
+      '<a href="' + s.carpeta + '" target="_blank" rel="noopener">Abrir la carpeta</a>';
+  }
+  function pintarActual() {
+    if (!actual) return;
+    var x = pedidos.filter(function (y) { return y.pedido === actual; })[0];
+    if (!x) return;
+    var s = x.estado;
+    $('estado').style.display = 'block';
+    $('detalle').textContent = 'Se van a guardar en «' + x.carpeta + '». Podés cerrar o recargar la página: el pedido sigue y se guarda solo.';
+    $('fase').innerHTML = s && s.fase === 'error' ? '<span class="err">' + esc(textoEstado(s)) + '</span>' : esc(textoEstado(s));
+    $('barra').style.width = s && s.fase === 'listo' ? '100%' : Math.min(95, 5 + 90 * ((s && s.segundos) || 0) / ESTIMADO) + '%';
+    $('res').innerHTML = s && s.fase === 'listo' ? linksDe(s) : '';
+    if (s && (s.fase === 'listo' || s.fase === 'error')) validar();
+  }
+  function pintarLista() {
+    var otros = pedidos.filter(function (x) { return x.pedido !== actual; }).slice().reverse();
+    var cont = $('misPedidos');
+    if (!otros.length) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+    cont.style.display = 'block';
+    cont.innerHTML = '<h2>Tus pedidos</h2>' + otros.map(function (x) {
+      var s = x.estado, fin = s && (s.fase === 'listo' || s.fase === 'error');
+      var cuando = new Date(x.inicio).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return '<div class="pedido"><div class="ptit"><b>' + esc(x.titulo) + '</b><span>' + cuando + '</span></div>' +
+        '<div class="hint">Carpeta: ' + esc(x.carpeta) + '</div>' +
+        '<div class="' + (s && s.fase === 'error' ? 'err' : 'pest') + '">' + esc(textoEstado(s)) + '</div>' +
+        (s && s.fase === 'listo' ? '<div class="res">' + linksDe(s) + '</div>' : '') +
+        (fin ? '<button type="button" class="alt" data-quitar="' + x.pedido + '">Quitar de la lista</button>' : '') + '</div>';
+    }).join('');
+  }
+  $('misPedidos').onclick = function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute('data-quitar');
+    if (!id) return;
+    pedidos = pedidos.filter(function (x) { return x.pedido !== id; });
+    grabarPedidos(pedidos); pintarLista();
+  };
+  function pintar() { pintarActual(); pintarLista(); }
+
+  // Una sola ronda de consultas cada 15 s para todos los pedidos sin terminar
+  var vigilando = false;
+  function vigilar() {
+    var abiertos = pedidos.filter(function (x) { return !x.estado || (x.estado.fase !== 'listo' && x.estado.fase !== 'error'); });
+    if (!abiertos.length) { vigilando = false; return; }
+    vigilando = true;
+    Promise.all(abiertos.map(function (x) {
+      return run('estado', x.pedido).then(function (s) {
+        x.estado = s;
+        if (s.fase === 'listo' || s.fase === 'error') x.fin = Date.now();
+      }).catch(function (e) {
+        if (/desconocido/i.test(msg(e))) { x.estado = { fase: 'error', mensaje: 'La app no reconoce este pedido.' }; x.fin = Date.now(); }
+      });
+    })).then(function () { grabarPedidos(pedidos); pintar(); setTimeout(vigilar, 15000); });
+  }
+  function seguirSiHaceFalta() { if (!vigilando) vigilar(); }
+
   $('go').onclick = function () {
     $('go').disabled = true;
     $('estado').style.display = 'block';
     $('res').innerHTML = ''; $('fase').textContent = 'Iniciando…'; $('barra').style.width = '5%'; $('detalle').textContent = '';
-    var p = modo === 'prop'
+    var esProp = modo === 'prop';
+    var p = esProp
       ? run('generar', destino(), $('link').value, $('titulo').value, $('puntos').value)
       : run('generarZonas', destino(), { contexto: $('ciudad').value.trim() || 'Ciudad Autónoma de Buenos Aires', subtitulo: '', videos: leerVideos() });
     p.then(function (r) {
-      total = r.videos || 2;
-      $('detalle').textContent = 'Se van a guardar en «' + r.carpeta + '».';
-      seguir(r.pedido);
+      var titulo = esProp ? 'Propiedad · ' + ($('titulo').value.trim() || $('link').value.trim().replace(/^https?:\/\//, '').slice(0, 40)) : 'Zonas · ' + (r.videos || 1) + (r.videos === 1 ? ' video' : ' videos');
+      pedidos.push({ pedido: r.pedido, titulo: titulo, carpeta: r.carpeta, inicio: Date.now(), estado: null });
+      grabarPedidos(pedidos);
+      actual = r.pedido;
+      pintar();
+      seguirSiHaceFalta();
     }).catch(function (e) { fallo(msg(e)); });
   };
 
-  var ESTIMADO = 15 * 60; // segundos aproximados de un render en GitHub
-  function seguir(pedido) {
-    run('estado', pedido).then(function (s) {
-      if (s.fase === 'listo') {
-        $('fase').textContent = 'Listo: ' + (s.archivos.length === 1 ? 'el video está' : 'los ' + s.archivos.length + ' videos están') + ' en Drive.';
-        $('barra').style.width = '100%';
-        $('res').innerHTML = s.archivos.map(function (a) { return '<a href="' + a.url + '" target="_blank" rel="noopener">▶ ' + a.nombre.replace(/</g, '&lt;') + '</a>'; }).join('') +
-          '<a href="' + s.carpeta + '" target="_blank" rel="noopener">Abrir la carpeta</a>';
-        $('go').disabled = false;
-        return;
-      }
-      if (s.fase === 'error') return fallo(s.mensaje);
-      var min = Math.floor(s.segundos / 60);
-      $('fase').textContent = (s.fase === 'en cola' ? 'Esperando un servidor libre…' : s.fase === 'guardando' ? 'Guardando en Drive (' + s.hechos + ' de ' + s.total + ')…' : 'Generando los videos…') + ' (' + min + ' min)';
-      $('barra').style.width = Math.min(95, 5 + 90 * s.segundos / ESTIMADO) + '%';
-      setTimeout(function () { seguir(pedido); }, 15000);
-    }).catch(function (e) {
-      $('detalle').textContent = 'Reintentando… (' + msg(e) + ')';
-      setTimeout(function () { seguir(pedido); }, 20000);
-    });
-  }
   function fallo(t) {
-    $('fase').innerHTML = '<span class="err">No se pudo generar: ' + String(t).replace(/</g, '&lt;') + '</span>';
+    $('fase').innerHTML = '<span class="err">No se pudo generar: ' + esc(String(t)) + '</span>';
     $('go').disabled = false;
   }
+
+  // Al abrir o recargar: mostrar y seguir los pedidos guardados en este navegador
+  pintar();
+  seguirSiHaceFalta();
 })();
 </script>
 </body>
