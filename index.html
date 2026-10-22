@@ -169,10 +169,11 @@
     var l = $('lista');
     l.innerHTML = '';
     if (!q) { l.style.display = 'none'; return; }
-    var m = clientes.filter(function (c) { return norm(c.nombre).indexOf(q) >= 0; }).slice(0, 30);
+    var m = clientes.filter(function (c) { return norm(c.nombre + ' ' + (c.grupo || '')).indexOf(q) >= 0; }).slice(0, 30);
     m.forEach(function (c) {
       var b = document.createElement('button');
       b.type = 'button'; b.textContent = c.nombre;
+      if (c.grupo) { var g = document.createElement('span'); g.textContent = ' · ' + c.grupo; g.style.color = 'var(--mute)'; b.appendChild(g); }
       b.onclick = function () { elegir(c); };
       l.appendChild(b);
     });
