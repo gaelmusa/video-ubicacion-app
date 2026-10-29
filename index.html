@@ -410,7 +410,7 @@
     pedidos = pedidos.filter(function (x) { return x.pedido !== id; });
     grabarPedidos(pedidos); pintarLista();
   };
-  function pintar() { pintarActual(); pintarLista(); }
+  function pintarPedidos() { pintarActual(); pintarLista(); }
 
   // Una sola ronda de consultas cada 15 s para todos los pedidos sin terminar
   var vigilando = false;
@@ -425,7 +425,7 @@
       }).catch(function (e) {
         if (/desconocido/i.test(msg(e))) { x.estado = { fase: 'error', mensaje: 'La app no reconoce este pedido.' }; x.fin = Date.now(); }
       });
-    })).then(function () { grabarPedidos(pedidos); pintar(); setTimeout(vigilar, 15000); });
+    })).then(function () { grabarPedidos(pedidos); pintarPedidos(); setTimeout(vigilar, 15000); });
   }
   function seguirSiHaceFalta() { if (!vigilando) vigilar(); }
 
@@ -442,7 +442,7 @@
       pedidos.push({ pedido: r.pedido, titulo: titulo, carpeta: r.carpeta, carpetaUrl: r.carpetaUrl || '', inicio: Date.now(), estado: null });
       grabarPedidos(pedidos);
       actual = r.pedido;
-      pintar();
+      pintarPedidos();
       seguirSiHaceFalta();
     }).catch(function (e) { fallo(msg(e)); });
   };
@@ -453,7 +453,7 @@
   }
 
   // Al abrir o recargar: mostrar y seguir los pedidos guardados en este navegador
-  pintar();
+  pintarPedidos();
   seguirSiHaceFalta();
 })();
 </script>
